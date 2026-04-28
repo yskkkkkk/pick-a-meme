@@ -82,9 +82,13 @@ export default function Home() {
           ) : (
             <button 
               onClick={() => signIn('kakao')}
-              className="vibe-button py-2 px-4 text-sm"
+              className="hover:opacity-90 transition-opacity active:scale-95 duration-200"
             >
-              카카오로 1초 만에 시작하기!
+              <img 
+                src="/images/kakao/kakao_login_medium_wide.png" 
+                alt="카카오 로그인" 
+                className="h-10 w-auto"
+              />
             </button>
           )}
           
