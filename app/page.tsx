@@ -1,25 +1,55 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSession, signIn, signOut } from 'next-auth/react';
 import { useStamina } from '@/hooks/use-stamina';
 import { generateRandomMeme } from '@/lib/meme-engine';
 import { GeneratedMeme } from '@/types';
 
 export default function Home() {
+  const { data: session, status } = useSession();
   const { hearts, maxHearts, formattedTime, consumeHeart } = useStamina();
   const [currentMeme, setCurrentMeme] = useState<GeneratedMeme | null>(null);
+  const [memeHistory, setMemeHistory] = useState<GeneratedMeme[]>([]);
+
+  useEffect(() => {
+    // 로컬 스토리지에서 밈 히스토리 불러오기 (로그인 후에는 서버 데이터로 대체)
+    const storedHistory = localStorage.getItem('meme_history');
+    if (storedHistory) {
+      setMemeHistory(JSON.parse(storedHistory));
+    }
+  }, []);
+
+  useEffect(() => {
+    // 밈 히스토리 변경 시 로컬 스토리지에 저장
+    localStorage.setItem('meme_history', JSON.stringify(memeHistory));
+  }, [memeHistory]);
 
   const handleGenerate = () => {
     if (consumeHeart()) {
       const meme = generateRandomMeme();
       setCurrentMeme(meme);
-      
-      // 로컬 도감에 저장 (최근 10개)
-      const history = JSON.parse(localStorage.getItem('meme_history') || '[]');
-      const newHistory = [meme, ...history].slice(0, 10);
-      localStorage.setItem('meme_history', JSON.stringify(newHistory));
+      setMemeHistory(prev => [meme, ...prev].slice(0, 10)); // 최근 10개 유지
     } else {
       alert('하트가 부족합니다! 5분 뒤에 다시 시도해주세요.');
+    };
+  };
+
+  const handleShare = async () => {
+    if (!currentMeme) return;
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `[PICK-A-MEME] 내 운빨 밈! ${currentMeme.phrase.text}`,
+          text: currentMeme.phrase.text,
+          url: window.location.href, // 나중에 개별 밈 URL로 교체
+        });
+      } catch (error) {
+        console.error('공유 실패', error);
+      }
+    } else {
+      alert('이 브라우저에서는 공유 기능을 지원하지 않습니다.');
     }
   };
 
@@ -35,16 +65,37 @@ export default function Home() {
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center p-4">
-      {/* ... 헤더 생략 ... */}
+      {/* 헤더 / 스태미나 영역 */}
       <header className="w-full max-w-md flex justify-between items-center mb-8 p-4 vibe-border bg-black">
         <h1 className="text-2xl vibe-text text-white">밈.생.기</h1>
         <div className="flex flex-col items-end">
-          <div className="text-xl font-bold flex items-center gap-1">
-            <span className="text-red-500">❤️</span>
-            <span>{hearts} / {maxHearts}</span>
-          </div>
-          <div className="text-sm text-gray-300 font-mono">
-            {hearts < maxHearts ? `다음 충전: ${formattedTime}` : 'MAX'}
+          {session ? (
+            <div className="text-right">
+              <p className="text-sm text-gray-300">반가워요, <span className="font-bold text-white">{(session.user?.name || session.user?.email || '유저')}</span>님!</p>
+              <button 
+                onClick={() => signOut()}
+                className="mt-1 text-xs text-blue-400 hover:underline"
+              >
+                로그아웃
+              </button>
+            </div>
+          ) : (
+            <button 
+              onClick={() => signIn('kakao')}
+              className="vibe-button py-2 px-4 text-sm"
+            >
+              카카오로 1초 만에 시작하기!
+            </button>
+          )}
+          
+          <div className="flex flex-col items-end mt-2">
+            <div className="text-xl font-bold flex items-center gap-1">
+              <span className="text-red-500">❤️</span>
+              <span>{hearts} / {maxHearts}</span>
+            </div>
+            <div className="text-sm text-gray-300 font-mono">
+              {hearts < maxHearts ? `다음 충전: ${formattedTime}` : 'MAX'}
+            </div>
           </div>
         </div>
       </header>
@@ -138,6 +189,25 @@ export default function Home() {
           >
             📤 친구에게 공유하기
           </button>
+        )}
+
+        {/* 로컬 도감 - 최근 뽑은 밈 */} 
+        {memeHistory.length > 0 && (
+          <div className="mt-8">
+            <h3 className="text-xl vibe-text mb-4 text-white">내 보관함 (최근 10개)</h3>
+            <div className="grid grid-cols-3 gap-2">
+              {memeHistory.map((meme, index) => (
+                <div 
+                  key={index} 
+                  className="relative w-full aspect-square bg-gray-800 border border-gray-700 overflow-hidden cursor-pointer"
+                  onClick={() => setCurrentMeme(meme)}
+                >
+                  <img src={meme.background.url} alt="" className="w-full h-full object-cover opacity-60" />
+                  <span className="absolute bottom-1 right-1 text-[8px] uppercase font-bold text-gray-400">{meme.recipe.rarity}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </main>
